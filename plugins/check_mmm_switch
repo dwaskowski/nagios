@@ -1,0 +1,51 @@
+#!/usr/bin/perl -w
+
+################################################################################
+# check_mmm_switch - Nagios Plug-In for MMM switch writer check.
+#
+# @author  Dmitrij Waskowski <dymitr@gmail.com>
+# @date    2015-08-19
+# @license GPL v2
+#     
+################################################################################
+
+use strict;
+use warnings FATAL => 'all';
+use Pod::Usage;
+use Getopt::Long;
+use Sys::Hostname;
+use English qw(-no_match_vars);
+use lib "/usr/local/nagios/libexec";
+use lib "/usr/lib/nagios/plugins";
+use lib "/usr/lib64/nagios/plugins";
+use utils qw(%ERRORS);
+
+chomp(my $mmm_control = `which mmm_control 2>/dev/null`);
+
+# Verify executable was found
+if(! -x $mmm_control) {
+    print "Could not find mmm_control\n";
+    exit $ERRORS{'UNKNOWN'};
+}
+
+my $master_ip_file = "/etc/nagios/mmm_master.nagios";
+my $mmm_show = $mmm_control.' show';
+chomp(my $master_ip_new = `$mmm_show | grep 'writer(' | grep -oP '([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)\\) master' | sed 's/) master//'`);
+if (open(my $fhr, '<:encoding(UTF-8)', $master_ip_file)) {
+    my $master_ip_from_file = <$fhr>;
+    close $fhr;
+    my $master_ip_old = $master_ip_from_file ? $master_ip_from_file : "";
+    if ($master_ip_old =~ /$master_ip_new/ && $master_ip_old ne "") {
+        print "Writer OK\n";
+        exit $ERRORS{'OK'};
+    } else {
+        open(my $fhw, '>', $master_ip_file);
+        print $fhw $master_ip_new;
+        close $fhw;
+        print "Writer was changed\n";
+        exit $ERRORS{'CRITICAL'};
+    }
+} else {
+	print "Can't create file $master_ip_file\n";
+	exit $ERRORS{'UNKNOWN'};
+}
